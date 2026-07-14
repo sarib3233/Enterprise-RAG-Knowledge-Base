@@ -92,19 +92,22 @@ export async function streamChat(
     }
   }
 
+  // Events are separated by a blank line; servers may use \n or \r\n endings.
+  const boundaryRe = /\r?\n\r?\n/
+
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
 
-    let boundary: number
-    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-      const rawEvent = buffer.slice(0, boundary)
-      buffer = buffer.slice(boundary + 2)
+    let boundary: RegExpExecArray | null
+    while ((boundary = boundaryRe.exec(buffer)) !== null) {
+      const rawEvent = buffer.slice(0, boundary.index)
+      buffer = buffer.slice(boundary.index + boundary[0].length)
 
       let eventName = 'message'
       const dataLines: string[] = []
-      for (const line of rawEvent.split('\n')) {
+      for (const line of rawEvent.split(/\r?\n/)) {
         if (line.startsWith('event:')) eventName = line.slice(6).trim()
         else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
       }

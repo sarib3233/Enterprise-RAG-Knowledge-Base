@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import Markdown from 'react-markdown'
 import { streamChat } from '../api/client'
 import type { Source } from '../api/types'
+import { SendIcon, SparklesIcon } from './icons'
 import { SourceCard } from './SourceCard'
 
 export interface ChatMessage {
@@ -16,19 +18,34 @@ interface Props {
   initialMessages?: ChatMessage[]
 }
 
+const SUGGESTIONS = [
+  'Summarize this document in five bullet points',
+  'What are the key figures and dates?',
+  'What risks or caveats are mentioned?',
+]
+
+function AssistantAvatar() {
+  return (
+    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-md shadow-indigo-950/50 ring-1 ring-white/15">
+      <SparklesIcon className="h-4 w-4 text-white" />
+    </span>
+  )
+}
+
 export function ChatWindow({ documentId, documentTitle, initialMessages = [] }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const conversationIdRef = useRef<string | undefined>(undefined)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const send = async () => {
-    const question = input.trim()
+  const send = async (text?: string) => {
+    const question = (text ?? input).trim()
     if (!question || busy) return
     setInput('')
     setBusy(true)
@@ -73,6 +90,7 @@ export function ChatWindow({ documentId, documentTitle, initialMessages = [] }: 
       }))
     } finally {
       setBusy(false)
+      inputRef.current?.focus()
     }
   }
 
@@ -80,34 +98,61 @@ export function ChatWindow({ documentId, documentTitle, initialMessages = [] }: 
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-6 overflow-y-auto px-1 py-6">
         {messages.length === 0 && (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <p className="text-lg font-medium text-slate-300">
-              Ask anything about {documentTitle ? `"${documentTitle}"` : 'your documents'}
-            </p>
-            <p className="max-w-md text-sm text-slate-500">
-              Answers are grounded in the uploaded text and cite the exact pages they came from.
-            </p>
+          <div className="animate-fade-in flex h-full flex-col items-center justify-center gap-6 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 ring-1 ring-white/10">
+              <SparklesIcon className="h-8 w-8 text-indigo-300" />
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-slate-200">
+                Ask anything about {documentTitle ? <span className="capitalize">“{documentTitle}”</span> : 'your documents'}
+              </p>
+              <p className="mx-auto mt-1.5 max-w-md text-sm text-pretty text-slate-500">
+                Answers are grounded in the uploaded text and cite the exact pages they came from.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              {SUGGESTIONS.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => void send(suggestion)}
+                  className="glass rounded-full px-4 py-2 text-sm text-slate-300 transition-all hover:border-indigo-400/40 hover:bg-indigo-500/10 hover:text-white"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
         )}
+
         {messages.map((message, i) =>
           message.role === 'user' ? (
-            <div key={i} className="flex justify-end">
-              <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-indigo-600 px-4 py-2.5 text-sm text-white">
+            <div key={i} className="animate-fade-up flex justify-end">
+              <div className="max-w-[80%] rounded-3xl rounded-br-lg bg-gradient-to-br from-indigo-600 to-violet-600 px-4.5 py-3 text-sm leading-relaxed text-white shadow-lg shadow-indigo-950/40">
                 {message.content}
               </div>
             </div>
           ) : (
-            <div key={i} className="flex justify-start">
-              <div className="max-w-[85%] space-y-3">
-                <div className="rounded-2xl rounded-bl-sm border border-slate-800 bg-slate-900/80 px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap text-slate-200">
-                  {message.content}
-                  {message.streaming && (
-                    <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-indigo-400 align-text-bottom" />
+            <div key={i} className="animate-fade-up flex gap-3">
+              <AssistantAvatar />
+              <div className="min-w-0 max-w-[85%] space-y-3">
+                <div className="glass rounded-3xl rounded-tl-lg px-4.5 py-3">
+                  {message.content ? (
+                    <div className="prose-chat">
+                      <Markdown>{message.content}</Markdown>
+                    </div>
+                  ) : (
+                    <span className="flex items-center gap-1 py-1" aria-label="Assistant is thinking">
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                    </span>
                   )}
                 </div>
                 {message.sources && message.sources.length > 0 && (
                   <div className="space-y-1.5">
-                    <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">Sources</p>
+                    <p className="pl-1 text-[11px] font-semibold tracking-widest text-slate-500 uppercase">
+                      Sources
+                    </p>
                     {message.sources.map((source, j) => (
                       <SourceCard key={source.chunk_id} source={source} index={j} />
                     ))}
@@ -125,21 +170,33 @@ export function ChatWindow({ documentId, documentTitle, initialMessages = [] }: 
           e.preventDefault()
           void send()
         }}
-        className="flex gap-2 border-t border-slate-800 pt-4"
+        className="pb-6"
       >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a question about the document…"
-          className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-indigo-500"
-        />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {busy ? 'Thinking…' : 'Send'}
-        </button>
+        <div className="glass flex items-center gap-2 rounded-2xl p-2 transition-colors focus-within:border-indigo-400/40">
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask a question about the document…"
+            autoFocus
+            className="flex-1 bg-transparent px-3 py-2 text-sm text-slate-100 placeholder-slate-500 outline-none"
+          />
+          <button
+            type="submit"
+            disabled={busy || !input.trim()}
+            aria-label="Send message"
+            className="flex h-9.5 w-9.5 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-950/50 transition-all hover:from-indigo-500 hover:to-violet-500 disabled:cursor-not-allowed disabled:opacity-30 disabled:shadow-none"
+          >
+            {busy ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/80 border-t-transparent" />
+            ) : (
+              <SendIcon className="h-4.5 w-4.5" />
+            )}
+          </button>
+        </div>
+        <p className="mt-2 text-center text-[11px] text-slate-600">
+          Answers are generated from your documents and may require verification for critical use.
+        </p>
       </form>
     </div>
   )
