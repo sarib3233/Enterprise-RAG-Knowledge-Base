@@ -10,7 +10,11 @@ from app.config import get_settings
 @lru_cache
 def get_openai_client() -> AsyncOpenAI:
     settings = get_settings()
-    return AsyncOpenAI(api_key=settings.openai_api_key or "unused", base_url=settings.openai_base_url)
+    # `or None` so an empty env var falls back to the provider default URL
+    return AsyncOpenAI(
+        api_key=settings.openai_api_key or "unused",
+        base_url=settings.openai_base_url or None,
+    )
 
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:
